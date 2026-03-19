@@ -1,0 +1,12 @@
+{
+  "name": "chatroom-app",
+  "version": "1.0.0",
+  "description": "MERN real-time chat app with native WebSockets",
+  "scripts": {
+    "dev:server": "cd server && npm run dev",
+    "dev:client": "cd client && npm run dev",
+    "install:all": "cd server && npm install && cd ../client && npm install",
+    "start": "cd server && npm start"
+  },
+  "author": "Shiv Gupta"
+}
