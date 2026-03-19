@@ -31,6 +31,8 @@ const clients = new Map()
 
 // roomId → Set of socketIds
 const rooms = new Map()
+// roomId → Set of unique userIds (for counting active members)
+const roomMembers = new Map()
 
 function getRoomClients(roomId) {
   return rooms.get(roomId) || new Set()
@@ -52,7 +54,7 @@ function broadcastAll(roomId, payload) {
 }
 
 function getRoomUserCount(roomId) {
-  return getRoomClients(roomId).size
+  return (roomMembers.get(roomId) || new Set()).size
 }
 
 function safeSend(socket, payload) {
@@ -99,6 +101,12 @@ async function handleJoin(socketId, client, payload) {
   if (!rooms.has(roomId)) rooms.set(roomId, new Set())
   rooms.get(roomId).add(socketId)
 
+  // Track unique active members by userId (not by socket connection)
+  if (!roomMembers.has(roomId)) roomMembers.set(roomId, new Set())
+  const memberSet = roomMembers.get(roomId)
+  const isNewMember = !memberSet.has(userId)
+  memberSet.add(userId)
+
   // Send session confirmation
   safeSend(client.socket, {
     type: 'session',
@@ -124,15 +132,21 @@ async function handleJoin(socketId, client, payload) {
     })),
   })
 
-  // Broadcast join to everyone in room
+  // Always send current count to the joining client
   const usersCount = getRoomUserCount(roomId)
-  broadcastAll(roomId, {
+  const joinPayload = {
     type: 'join',
     username,
     userId,
     usersCount,
     timestamp: new Date(),
-  })
+  }
+  safeSend(client.socket, joinPayload)
+
+  // Broadcast to others only when a new unique member joins
+  if (isNewMember) {
+    broadcast(roomId, joinPayload, socketId)
+  }
 }
 
 async function handleChat(socketId, client, payload) {
@@ -186,14 +200,27 @@ function leaveRoom(socketId, client) {
     if (roomSet.size === 0) rooms.delete(roomId)
   }
 
-  const usersCount = getRoomUserCount(roomId)
-  broadcast(roomId, {
-    type: 'leave',
-    username,
-    userId,
-    usersCount,
-    timestamp: new Date(),
-  })
+  // Decrement only when this user has no other active socket in the same room
+  const hasOtherConnections = Array.from(getRoomClients(roomId)).some(
+    (sid) => clients.get(sid)?.userId === userId
+  )
+
+  if (!hasOtherConnections && userId) {
+    const memberSet = roomMembers.get(roomId)
+    if (memberSet) {
+      memberSet.delete(userId)
+      if (memberSet.size === 0) roomMembers.delete(roomId)
+    }
+
+    const usersCount = getRoomUserCount(roomId)
+    broadcast(roomId, {
+      type: 'leave',
+      username,
+      userId,
+      usersCount,
+      timestamp: new Date(),
+    })
+  }
 
   client.roomId = null
 }
@@ -235,6 +262,7 @@ export function setupWebSocket(wss) {
 
     socket.on('error', (err) => {
       console.error('Socket error:', err)
+      leaveRoom(socketId, client)
       clients.delete(socketId)
     })
   })
