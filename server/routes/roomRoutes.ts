@@ -1,4 +1,4 @@
-import express from 'express'
+import { Router } from 'express'
 import {
   createRoom,
   joinRoom,
@@ -7,7 +7,7 @@ import {
 } from '../controllers/roomController.js'
 import { protect } from '../middleware/auth.js'
 
-const router = express.Router()
+const router = Router()
 
 router.use(protect) // All room routes require auth
 

@@ -19,26 +19,41 @@
  *   error    — error payload
  */
 
+import { WebSocket, WebSocketServer } from 'ws'
 import { verifyToken } from '../utils/jwt.js'
 import Message from '../models/Message.js'
 import Room from '../models/Room.js'
 import User from '../models/User.js'
 import { v4 as uuidv4 } from 'uuid'
 
+interface Client {
+  socket: WebSocket
+  socketId: string
+  sessionId: string
+  userId: string | null
+  username: string | null
+  roomId: string | null
+}
+
+interface ChatMessage {
+  type: 'join' | 'chat' | 'leave' | 'typing' | 'session' | 'history' | 'error'
+  payload?: Record<string, any>
+}
+
 // In-memory maps
-// socketId → { socket, userId, username, roomId, sessionId }
-const clients = new Map()
+const clients = new Map<string, Client>()
+const rooms = new Map<string, Set<string>>()
+const roomMembers = new Map<string, Set<string>>()
 
-// roomId → Set of socketIds
-const rooms = new Map()
-// roomId → Set of unique userIds (for counting active members)
-const roomMembers = new Map()
-
-function getRoomClients(roomId) {
+function getRoomClients(roomId: string): Set<string> {
   return rooms.get(roomId) || new Set()
 }
 
-function broadcast(roomId, payload, excludeSocketId = null) {
+function broadcast(
+  roomId: string,
+  payload: Record<string, any>,
+  excludeSocketId: string | null = null
+): void {
   const roomClients = getRoomClients(roomId)
   const data = JSON.stringify(payload)
   for (const socketId of roomClients) {
@@ -49,25 +64,28 @@ function broadcast(roomId, payload, excludeSocketId = null) {
   }
 }
 
-function broadcastAll(roomId, payload) {
+function broadcastAll(roomId: string, payload: Record<string, any>): void {
   broadcast(roomId, payload, null)
 }
 
-function getRoomUserCount(roomId) {
+function getRoomUserCount(roomId: string): number {
   return (roomMembers.get(roomId) || new Set()).size
 }
 
-function safeSend(socket, payload) {
+function safeSend(socket: WebSocket, payload: Record<string, any>): void {
   if (socket.readyState === 1) {
     socket.send(JSON.stringify(payload))
   }
 }
 
-async function handleJoin(socketId, client, payload) {
+async function handleJoin(
+  socketId: string,
+  client: Client,
+  payload: Record<string, any>
+): Promise<void> {
   const { roomId, token } = payload
 
-  // Authenticate via JWT
-  let userId, username
+  let userId: string, username: string
   try {
     const decoded = verifyToken(token)
     const user = await User.findById(decoded.userId)
@@ -79,35 +97,29 @@ async function handleJoin(socketId, client, payload) {
     return
   }
 
-  // Validate room exists in DB
   const room = await Room.findOne({ roomId })
   if (!room) {
     safeSend(client.socket, { type: 'error', message: 'Room not found.' })
     return
   }
 
-  // Remove from old room if any
   if (client.roomId && client.roomId !== roomId) {
     leaveRoom(socketId, client)
   }
 
-  // Update client info
   client.userId = userId
   client.username = username
   client.roomId = roomId
   clients.set(socketId, client)
 
-  // Register in rooms map
   if (!rooms.has(roomId)) rooms.set(roomId, new Set())
-  rooms.get(roomId).add(socketId)
+  rooms.get(roomId)!.add(socketId)
 
-  // Track unique active members by userId (not by socket connection)
   if (!roomMembers.has(roomId)) roomMembers.set(roomId, new Set())
-  const memberSet = roomMembers.get(roomId)
+  const memberSet = roomMembers.get(roomId)!
   const isNewMember = !memberSet.has(userId)
   memberSet.add(userId)
 
-  // Send session confirmation
   safeSend(client.socket, {
     type: 'session',
     sessionId: client.sessionId,
@@ -115,14 +127,13 @@ async function handleJoin(socketId, client, payload) {
     username,
   })
 
-  // Fetch and send message history (last 50)
   const history = await Message.find({ roomId })
     .sort({ createdAt: -1 })
     .limit(50)
     .lean()
   safeSend(client.socket, {
     type: 'history',
-    messages: history.reverse().map((m) => ({
+    messages: history.reverse().map((m: any) => ({
       id: m._id.toString(),
       sender: m.senderUsername,
       senderId: m.senderId.toString(),
@@ -132,7 +143,6 @@ async function handleJoin(socketId, client, payload) {
     })),
   })
 
-  // Always send current count to the joining client
   const usersCount = getRoomUserCount(roomId)
   const joinPayload = {
     type: 'join',
@@ -143,13 +153,16 @@ async function handleJoin(socketId, client, payload) {
   }
   safeSend(client.socket, joinPayload)
 
-  // Broadcast to others only when a new unique member joins
   if (isNewMember) {
     broadcast(roomId, joinPayload, socketId)
   }
 }
 
-async function handleChat(socketId, client, payload) {
+async function handleChat(
+  socketId: string,
+  client: Client,
+  payload: Record<string, any>
+): Promise<void> {
   const { roomId, message, imageUrl } = payload
 
   if (!client.userId || !client.roomId) {
@@ -157,7 +170,6 @@ async function handleChat(socketId, client, payload) {
     return
   }
 
-  // Save to DB
   const saved = await Message.create({
     roomId: client.roomId,
     senderId: client.userId,
@@ -180,17 +192,25 @@ async function handleChat(socketId, client, payload) {
   broadcastAll(client.roomId, outgoing)
 }
 
-function handleTyping(socketId, client, payload) {
+function handleTyping(
+  socketId: string,
+  client: Client,
+  payload: Record<string, any>
+): void {
   if (!client.roomId) return
-  broadcast(client.roomId, {
-    type: 'typing',
-    username: client.username,
-    userId: client.userId,
-    isTyping: payload.isTyping,
-  }, socketId) // exclude the sender
+  broadcast(
+    client.roomId,
+    {
+      type: 'typing',
+      username: client.username,
+      userId: client.userId,
+      isTyping: payload.isTyping,
+    },
+    socketId
+  )
 }
 
-function leaveRoom(socketId, client) {
+function leaveRoom(socketId: string, client: Client): void {
   const { roomId, username, userId } = client
   if (!roomId) return
 
@@ -200,7 +220,6 @@ function leaveRoom(socketId, client) {
     if (roomSet.size === 0) rooms.delete(roomId)
   }
 
-  // Decrement only when this user has no other active socket in the same room
   const hasOtherConnections = Array.from(getRoomClients(roomId)).some(
     (sid) => clients.get(sid)?.userId === userId
   )
@@ -225,16 +244,23 @@ function leaveRoom(socketId, client) {
   client.roomId = null
 }
 
-export function setupWebSocket(wss) {
-  wss.on('connection', (socket) => {
+export function setupWebSocket(wss: WebSocketServer): void {
+  wss.on('connection', (socket: WebSocket) => {
     const socketId = uuidv4()
     const sessionId = uuidv4()
 
-    const client = { socket, socketId, sessionId, userId: null, username: null, roomId: null }
+    const client: Client = {
+      socket,
+      socketId,
+      sessionId,
+      userId: null,
+      username: null,
+      roomId: null,
+    }
     clients.set(socketId, client)
 
-    socket.on('message', async (raw) => {
-      let msg
+    socket.on('message', async (raw: any) => {
+      let msg: ChatMessage
       try {
         msg = JSON.parse(raw)
       } catch {
@@ -260,7 +286,7 @@ export function setupWebSocket(wss) {
       clients.delete(socketId)
     })
 
-    socket.on('error', (err) => {
+    socket.on('error', (err: Error) => {
       console.error('Socket error:', err)
       leaveRoom(socketId, client)
       clients.delete(socketId)

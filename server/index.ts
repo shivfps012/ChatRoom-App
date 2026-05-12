@@ -1,4 +1,4 @@
-import express from 'express'
+import express, { Express } from 'express'
 import http from 'http'
 import { WebSocketServer } from 'ws'
 import cors from 'cors'
@@ -10,20 +10,22 @@ import { fileURLToPath } from 'url'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 dotenv.config({ path: path.join(__dirname, '.env') })
 
-import connectDB from './config/db.js'
+import { connectDB } from './config/db.js'
 import authRoutes from './routes/authRoutes.js'
 import roomRoutes from './routes/roomRoutes.js'
 import uploadRoutes from './routes/uploadRoutes.js'
 import { setupWebSocket } from './websocket/handler.js'
 
-const app = express()
+const app: Express = express()
 const server = http.createServer(app)
 
 // ─── Middleware ────────────────────────────────────────────────────────────────
-app.use(cors({
-  origin: process.env.CLIENT_URL || 'http://localhost:5173',
-  credentials: true,
-}))
+app.use(
+  cors({
+    origin: process.env.CLIENT_URL || 'http://localhost:5173',
+    credentials: true,
+  })
+)
 app.use(express.json({ limit: '10mb' }))
 app.use(cookieParser())
 
