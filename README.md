@@ -1,6 +1,6 @@
-# 💬 ChatRoom — MERN + Native WebSocket
+# 💬 ChatRoom — MERN + Native WebSocket + TypeScript
 
-A real-time chat application built with the MERN stack and native WebSockets (no Socket.IO).
+A real-time chat application built with the MERN stack, TypeScript, and native WebSockets (no Socket.IO).
 
 ## 📁 Project Structure
 
@@ -22,40 +22,50 @@ chatroom-app/
 │   ├── postcss.config.js
 │   └── vite.config.js
 │
-└── server/                   # Node.js + Express + WebSocket backend
+└── server/                   # Node.js + Express + WebSocket backend (TypeScript)
     ├── config/
-    │   ├── db.js              # MongoDB connection
-    │   └── cloudinary.js      # Cloudinary config
+    │   ├── db.ts              # MongoDB connection
+    │   └── cloudinary.ts      # Cloudinary config
     ├── controllers/
-    │   ├── authController.js  # signup, login, getMe, logout
-    │   └── roomController.js  # create, join, get room, messages
+    │   ├── authController.ts  # signup, login, getMe, logout
+    │   └── roomController.ts  # create, join, get room, messages
     ├── middleware/
-    │   └── auth.js            # JWT protect middleware
+    │   └── auth.ts            # JWT protect middleware + AuthRequest interface
     ├── models/
-    │   ├── User.js            # username, email, hashed password
-    │   ├── Room.js            # roomId, createdBy, participants
-    │   └── Message.js         # roomId, senderId, text, imageUrl
+    │   ├── User.ts            # IUser interface, username, email, hashed password
+    │   ├── Room.ts            # IRoom interface, roomId, createdBy, participants
+    │   └── Message.ts         # IMessage interface, roomId, senderId, text, imageUrl
     ├── routes/
-    │   ├── authRoutes.js
-    │   ├── roomRoutes.js
-    │   └── uploadRoutes.js    # Cloudinary image upload
+    │   ├── authRoutes.ts
+    │   ├── roomRoutes.ts
+    │   └── uploadRoutes.ts    # Cloudinary image upload
     ├── utils/
-    │   └── jwt.js             # generateToken, verifyToken
+    │   └── jwt.ts             # generateToken, verifyToken with TokenPayload interface
     ├── websocket/
-    │   └── handler.js         # All WebSocket logic
+    │   └── handler.ts         # All WebSocket logic with Client interface
+    ├── dist/                  # Compiled JavaScript output
     ├── .env.example
-    ├── index.js               # Server entry point
+    ├── index.ts               # Server entry point (TypeScript)
+    ├── tsconfig.json          # TypeScript configuration
     └── package.json
 ```
 
 ## 🚀 Quick Start
 
-### 1. Server Setup
+### 1. Server Setup (TypeScript)
 ```bash
 cd server
 cp .env.example .env
 # Fill in: MONGO_URI, JWT_SECRET, Cloudinary keys, CLIENT_URL
 npm install
+
+# Build TypeScript
+npm run build
+
+# Run compiled server
+npm start
+
+# Or run in development mode with auto-compilation
 npm run dev
 ```
 
@@ -110,8 +120,42 @@ VITE_WS_URL=ws://localhost:5000
 
 ## 🛠 Tech Stack
 - **Frontend:** React 18, Vite, Tailwind CSS, React Router v6
-- **Backend:** Node.js, Express, ws (native WebSocket)
-- **Database:** MongoDB + Mongoose
+- **Backend:** Node.js, Express, TypeScript, ws (native WebSocket)
+- **Database:** MongoDB + Mongoose (with TypeScript interfaces)
 - **Auth:** JWT + bcryptjs
 - **Image Upload:** Cloudinary
 - **Real-time:** Native WebSocket (ws library)
+- **Language:** TypeScript with strict mode, ES2020 target
+
+## 📦 Available Scripts
+
+### Server
+```bash
+npm run build    # Compile TypeScript to JavaScript (outputs to dist/)
+npm start        # Run compiled server (node dist/index.js)
+npm run dev      # Run in development mode with auto-compilation
+npm run watch    # Watch TypeScript files and recompile on changes
+```
+
+### Client
+```bash
+npm run dev      # Start Vite dev server (hot reload)
+npm run build    # Build for production
+npm run preview  # Preview production build locally
+```
+
+## 🔐 TypeScript Features
+
+### Type Safety Across Stack
+- **Models:** Mongoose schemas with TypeScript interfaces (`IUser`, `IMessage`, `IRoom`)
+- **Middleware:** Express middleware with custom `AuthRequest` interface
+- **Controllers:** Full Express `Request`/`Response` type safety
+- **WebSocket:** Custom `Client` and `ChatMessage` interfaces
+- **Utils:** JWT utilities with `TokenPayload` interface
+
+### Strict Compilation
+- `strict: true` in `tsconfig.json`
+- `noImplicitAny: true` 
+- `noUnusedLocals: true`
+- `noUnusedParameters: true`
+- ES2020 target with ES modules
