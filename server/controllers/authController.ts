@@ -19,16 +19,7 @@ const COOKIE_OPTIONS: CookieOptions = {
 
 export async function signup(req: AuthRequest, res: Response): Promise<void> {
   try {
-    const { username, email, password } = req.body as {
-      username: string
-      email: string
-      password: string
-    }
-
-    if (!username || !email || !password) {
-      res.status(400).json({ message: 'All fields are required.' })
-      return
-    }
+    const { username, email, password } = req.body
 
     const existingUser = await User.findOne({ $or: [{ email }, { username }] })
     if (existingUser) {
@@ -54,15 +45,7 @@ export async function signup(req: AuthRequest, res: Response): Promise<void> {
 
 export async function login(req: AuthRequest, res: Response): Promise<void> {
   try {
-    const { email, password } = req.body as {
-      email: string
-      password: string
-    }
-
-    if (!email || !password) {
-      res.status(400).json({ message: 'Email and password are required.' })
-      return
-    }
+    const { email, password } = req.body
 
     const user = await User.findOne({ email }).select('+password')
     if (!user || !(await user.comparePassword(password))) {

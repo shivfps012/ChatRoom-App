@@ -6,7 +6,7 @@ import { AuthRequest } from '../middleware/auth.js'
 
 export async function createRoom(req: AuthRequest, res: Response): Promise<void> {
   try {
-    const { name } = req.body as { name?: string }
+    const { name } = req.body
     const roomId = nanoid(10)
 
     const room = await Room.create({
@@ -25,12 +25,7 @@ export async function createRoom(req: AuthRequest, res: Response): Promise<void>
 
 export async function joinRoom(req: AuthRequest, res: Response): Promise<void> {
   try {
-    const { roomId } = req.body as { roomId: string }
-
-    if (!roomId) {
-      res.status(400).json({ message: 'Room ID is required.' })
-      return
-    }
+    const { roomId } = req.body
 
     const room = await Room.findOne({ roomId })
     if (!room) {
