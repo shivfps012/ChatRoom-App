@@ -138,7 +138,6 @@ export default function ChatPage() {
 
   const handleLeave = () => {
     disconnect()
-    localStorage.removeItem('roomId')
     navigate('/lobby')
   }
 
@@ -190,10 +189,10 @@ export default function ChatPage() {
           </div>
 
           {/* Right: status + actions */}
-          <div className="flex items-center space-x-2 sm:space-x-3 flex-shrink-0">
-            <div className="hidden sm:flex items-center space-x-1">
+          <div className="flex items-center space-x-1.5 sm:space-x-2 flex-shrink-0">
+            <div className="flex items-center space-x-1">
               <Users className={`w-4 h-4 ${dm ? 'text-gray-500' : 'text-gray-400'}`} />
-              <span className={`text-sm ${textSecondary}`}>{usersCount}</span>
+              <span className={`text-xs sm:text-sm ${textSecondary}`}>{usersCount}</span>
             </div>
             <div className="flex items-center space-x-1">
               {connected
@@ -204,10 +203,10 @@ export default function ChatPage() {
             <button onClick={() => setDarkMode(!dm)} className={`p-1.5 rounded-lg ${dm ? 'bg-gray-700 text-yellow-400 hover:bg-gray-600' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'} transition`}>
               {dm ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
             </button>
-            <button onClick={handleLeave} className={`text-xs font-medium px-2.5 py-1.5 rounded-lg text-red-400 border border-red-800 hover:bg-red-900/30 transition`}>
+            <button onClick={handleLeave} className={`text-xs font-medium px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-lg text-red-400 border border-red-800 hover:bg-red-900/30 transition whitespace-nowrap`}>
               Leave
             </button>
-            <button onClick={handleLogout} className={`hidden sm:flex items-center text-xs text-gray-400 hover:text-gray-200 transition`}>
+            <button onClick={handleLogout} className={`flex items-center text-xs text-gray-400 hover:text-gray-200 transition p-1.5 rounded-lg hover:bg-gray-700/30`}>
               <LogOut className="w-4 h-4" />
             </button>
           </div>

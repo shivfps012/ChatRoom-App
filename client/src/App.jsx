@@ -7,6 +7,7 @@ import ChatPage from './pages/ChatPage'
 
 function PrivateRoute({ children }) {
   const { user, loading } = useAuth()
+
   if (loading) return <FullScreenLoader />
   return user ? children : <Navigate to="/login" replace />
 }

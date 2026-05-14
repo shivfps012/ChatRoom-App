@@ -16,10 +16,17 @@ export function AuthProvider({ children }) {
 
     api.get('/api/auth/me')
       .then(({ data }) => setUser(data.user))
-      .catch(() => {
-        localStorage.removeItem('token')
-        localStorage.removeItem('user')
-        setUser(null)
+      .catch((error) => {
+        const status = error.response?.status
+        if (status === 401 || status === 403 || status === 429) {
+          localStorage.removeItem('token')
+          localStorage.removeItem('user')
+          localStorage.removeItem('roomId')
+          setUser(null)
+          if (status === 429) {
+            window.location.replace('/login')
+          }
+        }
       })
       .finally(() => setLoading(false))
   }, [])
@@ -34,7 +41,6 @@ export function AuthProvider({ children }) {
     try { await api.post('/api/auth/logout') } catch { /* ignore */ }
     localStorage.removeItem('token')
     localStorage.removeItem('user')
-    localStorage.removeItem('roomId')
     setUser(null)
   }
 

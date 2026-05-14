@@ -11,6 +11,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 dotenv.config({ path: path.join(__dirname, '.env') })
 
 import { connectDB } from './config/db.js'
+import { globalLimiter } from './config/rateLimiter.js'
 import authRoutes from './routes/authRoutes.js'
 import roomRoutes from './routes/roomRoutes.js'
 import uploadRoutes from './routes/uploadRoutes.js'
@@ -18,6 +19,9 @@ import { setupWebSocket } from './websocket/handler.js'
 
 const app: Express = express()
 const server = http.createServer(app)
+
+// Trust proxy - important for rate limiting to work correctly
+app.set('trust proxy', 1)
 
 // ─── Middleware ────────────────────────────────────────────────────────────────
 app.use(
@@ -28,6 +32,7 @@ app.use(
 )
 app.use(express.json({ limit: '10mb' }))
 app.use(cookieParser())
+app.use(globalLimiter) // Apply global rate limiter
 
 // ─── REST Routes ───────────────────────────────────────────────────────────────
 app.get('/health', (req, res) => res.json({ status: 'ok' }))
