@@ -6,10 +6,49 @@ export interface IMessage extends Document {
   senderUsername: string
   message: string
   imageUrl?: string
+  videoUrl?: string
+  replyTo?: {
+    messageId: string
+    senderId: string
+    senderUsername: string
+    messagePreview: string
+    imageUrl?: string
+    videoUrl?: string
+  } | null
   readBy: mongoose.Types.ObjectId[]
   createdAt: Date
   updatedAt: Date
 }
+
+const replyToSchema = new Schema(
+  {
+    messageId: {
+      type: String,
+      required: true,
+    },
+    senderId: {
+      type: String,
+      required: true,
+    },
+    senderUsername: {
+      type: String,
+      required: true,
+    },
+    messagePreview: {
+      type: String,
+      default: '',
+    },
+    imageUrl: {
+      type: String,
+      default: '',
+    },
+    videoUrl: {
+      type: String,
+      default: '',
+    },
+  },
+  { _id: false }
+)
 
 const messageSchema = new Schema<IMessage>(
   {
@@ -34,6 +73,14 @@ const messageSchema = new Schema<IMessage>(
     imageUrl: {
       type: String,
       default: '',
+    },
+    videoUrl: {
+      type: String,
+      default: '',
+    },
+    replyTo: {
+      type: replyToSchema,
+      default: null,
     },
     readBy: [
       {

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import {
   Send, Users, Wifi, WifiOff, MessageCircle,
-  Moon, Sun, Smile, ImageIcon, LogOut, Copy, Check,
+  Moon, Sun, Smile, ImageIcon, LogOut, Copy, Check, Reply, X, FileText, Video, Download,
 } from 'lucide-react'
 import EmojiPicker from 'emoji-picker-react'
 import { v4 as uuidv4 } from 'uuid'
@@ -41,6 +41,69 @@ function TypingIndicator({ users }) {
   )
 }
 
+function replyLabel(replyTo) {
+  if (!replyTo) return ''
+  if (replyTo.text) return replyTo.text
+  if (replyTo.videoUrl) return 'Video'
+  return replyTo.imageUrl ? 'Photo' : 'Message'
+}
+
+function ReplyPreview({ replyTo, isOwn, darkMode, currentUserId, onClick }) {
+  if (!replyTo) return null
+
+  const repliedByCurrentUser = replyTo.senderId === currentUserId
+  const senderLabel = repliedByCurrentUser ? 'You' : replyTo.sender
+  const hasImage = Boolean(replyTo.imageUrl)
+  const hasVideo = Boolean(replyTo.videoUrl)
+
+  const bgClass = isOwn
+    ? 'bg-emerald-950/35'
+    : darkMode
+    ? 'bg-gray-900/45'
+    : 'bg-gray-100'
+  const borderClass = isOwn
+    ? 'border-cyan-400'
+    : darkMode
+    ? 'border-blue-400'
+    : 'border-blue-500'
+  const senderClass = repliedByCurrentUser
+    ? 'text-blue-300'
+    : isOwn
+    ? 'text-rose-300'
+    : 'text-blue-500'
+  const textClass = isOwn || darkMode ? 'text-gray-200/80' : 'text-gray-600'
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`mb-2 grid w-full grid-cols-[minmax(0,1fr)_auto] overflow-hidden rounded-lg border-l-4 ${borderClass} ${bgClass} text-left`}
+    >
+      <div className="min-w-0 px-3 py-2">
+        <p className={`truncate text-sm font-bold ${senderClass}`}>{senderLabel}</p>
+        <div className={`mt-1 flex min-w-0 items-center gap-1.5 text-sm font-medium ${textClass}`}>
+          {hasImage && <ImageIcon className="h-4 w-4 flex-shrink-0 opacity-80" />}
+          {hasVideo && <Video className="h-4 w-4 flex-shrink-0 opacity-80" />}
+          {!hasImage && !hasVideo && !replyTo.text && <FileText className="h-4 w-4 flex-shrink-0 opacity-80" />}
+          <span className="truncate">{replyLabel(replyTo)}</span>
+        </div>
+      </div>
+      {hasImage && (
+        <img
+          src={replyTo.imageUrl}
+          alt=""
+          className="h-full max-h-[72px] w-20 object-cover"
+        />
+      )}
+      {hasVideo && (
+        <div className="flex h-full min-h-[72px] w-20 items-center justify-center bg-black/30">
+          <Video className="h-6 w-6 text-white/80" />
+        </div>
+      )}
+    </button>
+  )
+}
+
 export default function ChatPage() {
   const { roomId } = useParams()
   const { user, logout } = useAuth()
@@ -54,8 +117,11 @@ export default function ChatPage() {
   const [imageUploading, setImageUploading] = useState(false)
   const [copied, setCopied] = useState(false)
   const [wsError, setWsError] = useState('')
+  const [replyingTo, setReplyingTo] = useState(null)
+  const [highlightedMessageId, setHighlightedMessageId] = useState(null)
 
   const messagesEndRef = useRef(null)
+  const messageRefs = useRef({})
   const emojiPickerRef = useRef(null)
   const typingTimer = useRef(null)
   const isTypingRef = useRef(false)
@@ -87,8 +153,13 @@ export default function ChatPage() {
   // ── Handlers ────────────────────────────────────────────────────────────────
   const handleSend = () => {
     if (!message.trim() || !connected) return
-    sendChat({ message: message.trim() })
+    sendChat({
+      message: message.trim(),
+      replyToMessageId: replyingTo?.id,
+      replyTo: replyingTo,
+    })
     setMessage('')
+    setReplyingTo(null)
     handleStopTyping()
   }
 
@@ -117,20 +188,29 @@ export default function ChatPage() {
     clearTimeout(typingTimer.current)
   }
 
-  const handleImageUpload = async (e) => {
+  const handleMediaUpload = async (e) => {
     const file = e.target.files[0]
     if (!file || !connected) return
     e.target.value = null
     setImageUploading(true)
     try {
       const formData = new FormData()
-      formData.append('image', file)
+      formData.append('media', file)
       const { data } = await api.post('/api/upload', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       })
-      sendChat({ imageUrl: data.url })
-    } catch {
-      setWsError('Image upload failed.')
+      const isVideo = data.mediaType === 'video'
+      sendChat({
+        imageUrl: isVideo ? null : data.url,
+        videoUrl: isVideo ? data.url : null,
+        replyToMessageId: replyingTo?.id,
+        replyTo: replyingTo,
+      })
+      setReplyingTo(null)
+    } catch (err) {
+      console.error('Media upload error:', err)
+      const errorMsg = err?.response?.data?.message || err?.message || 'Media upload failed.'
+      setWsError(errorMsg)
     } finally {
       setImageUploading(false)
     }
@@ -151,6 +231,55 @@ export default function ChatPage() {
     navigator.clipboard.writeText(roomId)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
+  }
+
+  const handleDownloadImage = async (imageUrl, sender) => {
+    if (!imageUrl) return
+    
+    try {
+      // Fetch the image as a blob
+      const response = await fetch(imageUrl)
+      const blob = await response.blob()
+      
+      // Create a local object URL from the blob
+      const blobUrl = window.URL.createObjectURL(blob)
+      
+      // Create and trigger download
+      const link = document.createElement('a')
+      link.href = blobUrl
+      link.download = `${sender}-${Date.now()}.jpg`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      
+      // Clean up the blob URL
+      window.URL.revokeObjectURL(blobUrl)
+    } catch (err) {
+      console.error('Download failed:', err)
+      setWsError('Failed to download image.')
+    }
+  }
+
+  const handleReply = (msg) => {
+    setReplyingTo({
+      id: msg.id,
+      messageId: msg.id,
+      senderId: msg.senderId,
+      sender: msg.sender,
+      text: msg.text,
+      imageUrl: msg.image,
+      videoUrl: msg.video,
+    })
+    setShowEmojiPicker(false)
+  }
+
+  const jumpToMessage = (messageId) => {
+    const node = messageRefs.current[messageId]
+    if (!node) return
+
+    node.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    setHighlightedMessageId(messageId)
+    setTimeout(() => setHighlightedMessageId(null), 1200)
   }
 
   // ── Render ─────────────────────────────────────────────────────────────────
@@ -214,7 +343,7 @@ export default function ChatPage() {
       </div>
 
       {/* ── Messages ─────────────────────────────────────────────────────────── */}
-      <div className="flex-1 overflow-y-auto px-4 sm:px-6 pt-[72px] pb-[88px] space-y-3">
+      <div className={`flex-1 overflow-y-auto px-4 sm:px-6 pt-[72px] ${replyingTo ? 'pb-[136px]' : 'pb-[88px]'} space-y-3`}>
         {wsError && (
           <div className="sticky top-1 z-10 mx-auto w-fit px-4 py-2 bg-red-900/80 border border-red-700 rounded-xl text-red-300 text-sm">
             ⚠️ {wsError}
@@ -239,23 +368,56 @@ export default function ChatPage() {
               )
             }
             return (
-              <div key={msg.id} className={`flex ${msg.isOwn ? 'justify-end' : 'justify-start'} animate-fade-in-up`}>
+              <div
+                key={msg.id}
+                ref={(node) => {
+                  if (node) messageRefs.current[msg.id] = node
+                  else delete messageRefs.current[msg.id]
+                }}
+                className={`group flex ${msg.isOwn ? 'justify-end' : 'justify-start'} animate-fade-in-up`}
+              >
                 <div className={`max-w-[75%] sm:max-w-md px-4 py-2.5 rounded-2xl shadow-sm ${
                   msg.isOwn
                     ? 'bg-gradient-to-r from-blue-500 to-purple-600 text-white'
                     : dm
                     ? 'bg-gray-700 text-gray-200 border border-gray-600'
                     : 'bg-white text-gray-800 border border-gray-200'
-                }`}>
+                } ${highlightedMessageId === msg.id ? 'ring-2 ring-yellow-300' : ''}`}>
+                  <div className="flex items-start gap-2">
+                    <div className="min-w-0 flex-1">
                   {!msg.isOwn && (
                     <p className="text-xs font-semibold mb-1 opacity-70">{msg.sender}</p>
                   )}
+                  <ReplyPreview
+                    replyTo={msg.replyTo}
+                    isOwn={msg.isOwn}
+                    darkMode={dm}
+                    currentUserId={user?.id}
+                    onClick={() => jumpToMessage(msg.replyTo?.messageId)}
+                  />
                   {msg.image && (
-                    <img
-                      src={msg.image}
-                      alt="Sent"
-                      className="max-w-full rounded-xl cursor-zoom-in hover:opacity-90 transition mb-1"
-                      onClick={() => setZoomImage(msg.image)}
+                    <div className="relative mb-1 w-fit group/image">
+                      <img
+                        src={msg.image}
+                        alt="Sent"
+                        className="max-w-full rounded-xl cursor-zoom-in hover:opacity-90 transition"
+                        onClick={() => setZoomImage(msg.image)}
+                      />
+                      <button
+                        onClick={() => handleDownloadImage(msg.image, msg.sender)}
+                        className="absolute top-2 right-2 bg-black/60 hover:bg-black/80 text-white p-2 rounded-lg opacity-0 group-hover/image:opacity-100 transition-opacity"
+                        title="Download image"
+                      >
+                        <Download className="w-4 h-4" />
+                      </button>
+                    </div>
+                  )}
+                  {msg.video && (
+                    <video
+                      src={msg.video}
+                      className="mb-1 max-h-80 max-w-full rounded-xl bg-black"
+                      controls
+                      preload="metadata"
                     />
                   )}
                   {msg.text && (
@@ -269,6 +431,18 @@ export default function ChatPage() {
                   <p className={`text-xs mt-1 ${msg.isOwn ? 'text-white/60' : dm ? 'text-gray-500' : 'text-gray-400'}`}>
                     {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                   </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleReply(msg)}
+                      className={`mt-0.5 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition ${
+                        msg.isOwn ? 'text-white/70 hover:text-white' : dm ? 'text-gray-400 hover:text-white' : 'text-gray-500 hover:text-gray-900'
+                      }`}
+                      title="Reply"
+                    >
+                      <Reply className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
               </div>
             )
@@ -286,12 +460,32 @@ export default function ChatPage() {
             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
           </svg>
-          <span>Uploading image…</span>
+          <span>Uploading media…</span>
         </div>
       )}
 
       {/* ── Input bar ────────────────────────────────────────────────────────── */}
       <div className={`fixed bottom-0 w-full z-50 ${bgPanel} backdrop-blur-sm border-t px-4 sm:px-6 py-3`}>
+        {replyingTo && (
+          <div className={`mb-3 flex items-center gap-3 border-l-4 px-3 py-2 rounded-lg ${
+            dm ? 'bg-gray-700/80 border-blue-400 text-gray-100' : 'bg-gray-100 border-blue-500 text-gray-800'
+          }`}>
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-semibold truncate">Replying to {replyingTo.sender}</p>
+              <p className={`text-xs truncate ${dm ? 'text-gray-300' : 'text-gray-600'}`}>
+                {replyLabel(replyingTo)}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setReplyingTo(null)}
+              className={dm ? 'text-gray-300 hover:text-white' : 'text-gray-500 hover:text-gray-900'}
+              title="Cancel reply"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        )}
         <div className="flex items-center space-x-3">
           <div className="flex-1 relative" ref={emojiPickerRef}>
             {/* Emoji trigger */}
@@ -313,8 +507,8 @@ export default function ChatPage() {
             )}
 
             {/* Image upload */}
-            <input type="file" accept="image/*" onChange={handleImageUpload} className="hidden" id="img-upload" />
-            <label htmlFor="img-upload" className="absolute left-10 top-1/2 -translate-y-1/2 z-10 cursor-pointer">
+            <input type="file" accept="image/*,video/*" onChange={handleMediaUpload} className="hidden" id="media-upload" />
+            <label htmlFor="media-upload" className="absolute left-10 top-1/2 -translate-y-1/2 z-10 cursor-pointer">
               <ImageIcon className="w-5 h-5 text-pink-400 hover:text-pink-300 transition" />
             </label>
 

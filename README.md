@@ -89,6 +89,13 @@ CLOUDINARY_CLOUD_NAME=your_cloud_name
 CLOUDINARY_API_KEY=your_api_key
 CLOUDINARY_API_SECRET=your_api_secret
 CLIENT_URL=http://localhost:5173
+REDIS_URL=redis://localhost:6379
+REDIS_CHAT_CHANNEL=chatroom:events
+REDIS_PRESENCE_PREFIX=chatroom:presence
+REDIS_HISTORY_PREFIX=chatroom:history
+REDIS_HISTORY_LIMIT=500
+REDIS_HISTORY_TTL_SECONDS=3600
+REDIS_RATE_LIMIT_PREFIX=chatroom:rate-limit
 ```
 
 ### client/.env
@@ -103,7 +110,7 @@ VITE_WS_URL=ws://localhost:5000
 | Event | Payload | Description |
 |-------|---------|-------------|
 | `join` | `{ roomId, token }` | Join room + receive history |
-| `chat` | `{ roomId, message, imageUrl }` | Send a message |
+| `chat` | `{ roomId, message, imageUrl, videoUrl, replyToMessageId }` | Send a text, image, or video message, optionally as a reply |
 | `typing` | `{ isTyping }` | Typing indicator |
 | `leave` | `{ roomId }` | Leave room |
 
@@ -114,7 +121,7 @@ VITE_WS_URL=ws://localhost:5000
 | `history` | Last 50 messages from MongoDB |
 | `join` | User joined broadcast |
 | `leave` | User left broadcast |
-| `chat` | New message broadcast |
+| `chat` | New message broadcast, including `replyTo` snapshot when present |
 | `typing` | Typing indicator broadcast |
 | `error` | Error message |
 

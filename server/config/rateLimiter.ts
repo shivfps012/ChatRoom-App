@@ -1,6 +1,7 @@
 import rateLimit from 'express-rate-limit'
 import fs from 'fs'
 import path from 'path'
+import { RedisRateLimitStore } from './redisRateLimitStore.js'
 
 // Ensure logs directory exists and prepare log file
 const logsDir = path.join(process.cwd(), 'logs')
@@ -25,6 +26,7 @@ function appendRateLog(line: string) {
 export const globalLimiter = rateLimit({
   windowMs: 5 * 60 * 1000,
   max: 100,
+  store: new RedisRateLimitStore('global'),
   message: 'Too many requests from this IP, please try again later.',
   standardHeaders: true,
   legacyHeaders: false,
@@ -44,7 +46,10 @@ export const globalLimiter = rateLimit({
 export const authLimiter = rateLimit({
   windowMs: 5 * 60 * 1000,
   max: 5,
+  store: new RedisRateLimitStore('auth'),
   message: 'Too many login attempts, please try again later.',
+  standardHeaders: true,
+  legacyHeaders: false,
   skipSuccessfulRequests: true,
   handler: (req, res) => {
     console.warn(

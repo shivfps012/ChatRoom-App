@@ -16,6 +16,8 @@ import authRoutes from './routes/authRoutes.js'
 import roomRoutes from './routes/roomRoutes.js'
 import uploadRoutes from './routes/uploadRoutes.js'
 import { setupWebSocket } from './websocket/handler.js'
+import { closeRedis } from './config/redis.js'
+import { closeRateLimitRedis } from './config/redisRateLimitStore.js'
 
 const app: Express = express()
 const server = http.createServer(app)
@@ -51,4 +53,19 @@ connectDB().then(() => {
     console.log(`🚀 Server running on port ${PORT}`)
     console.log(`🔌 WebSocket ready`)
   })
+})
+
+async function shutdown(): Promise<void> {
+  await Promise.all([closeRedis(), closeRateLimitRedis()])
+  server.close(() => {
+    process.exit(0)
+  })
+}
+
+process.on('SIGINT', () => {
+  void shutdown()
+})
+
+process.on('SIGTERM', () => {
+  void shutdown()
 })

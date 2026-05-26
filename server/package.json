@@ -6,7 +6,7 @@
   "scripts": {
     "build": "tsc",
     "start": "node dist/index.js",
-    "dev": "ts-node index.ts",
+    "dev": "node --import \"data:text/javascript,import { register } from 'node:module'; import { pathToFileURL } from 'node:url'; register('ts-node/esm', pathToFileURL('./'));\" index.ts",
     "watch": "tsc --watch"
   },
   "dependencies": {
@@ -21,6 +21,7 @@
     "mongoose": "^8.4.0",
     "multer": "^1.4.5-lts.1",
     "nanoid": "^5.0.7",
+    "redis": "^5.12.1",
     "uuid": "^10.0.0",
     "ws": "^8.17.0",
     "zod": "^4.4.3"

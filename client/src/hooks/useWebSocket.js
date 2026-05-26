@@ -11,6 +11,33 @@ import { v4 as uuidv4 } from 'uuid'
 const WS_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:5000'
 const RECONNECT_DELAY = 3000
 
+function normalizeReplyTo(replyTo) {
+  if (!replyTo) return null
+
+  return {
+    messageId: replyTo.messageId || replyTo.id || replyTo._id,
+    senderId: replyTo.senderId,
+    sender: replyTo.sender || replyTo.senderUsername || 'Unknown',
+    text: replyTo.text || replyTo.messagePreview || replyTo.message || '',
+    imageUrl: replyTo.imageUrl || replyTo.image || null,
+    videoUrl: replyTo.videoUrl || replyTo.video || null,
+  }
+}
+
+function normalizeMessage(message, userId) {
+  return {
+    id: message.id || message._id,
+    sender: message.sender,
+    senderId: message.senderId,
+    isOwn: message.senderId === userId,
+    text: message.text || message.message || '',
+    image: message.imageUrl || message.image || null,
+    video: message.videoUrl || message.video || null,
+    replyTo: normalizeReplyTo(message.replyTo),
+    timestamp: new Date(message.timestamp),
+  }
+}
+
 export function useWebSocket({ roomId, token, userId, onError }) {
   const [messages, setMessages] = useState([])
   const [connected, setConnected] = useState(false)
@@ -58,13 +85,7 @@ export function useWebSocket({ roomId, token, userId, onError }) {
         case 'history':
           setMessages(
             msg.messages.map((m) => ({
-              id: m.id,
-              sender: m.sender,
-              senderId: m.senderId,
-              isOwn: m.senderId === userId,
-              text: m.text,
-              image: m.imageUrl,
-              timestamp: new Date(m.timestamp),
+              ...normalizeMessage(m, userId),
               isHistory: true,
             }))
           )
@@ -106,13 +127,8 @@ export function useWebSocket({ roomId, token, userId, onError }) {
           setMessages((prev) => [
             ...prev,
             {
+              ...normalizeMessage(msg, userId),
               id: msg.id || uuidv4(),
-              sender: msg.sender,
-              senderId: msg.senderId,
-              isOwn: msg.senderId === userId,
-              text: msg.text,
-              image: msg.imageUrl,
-              timestamp: new Date(msg.timestamp),
             },
           ])
           break
@@ -167,10 +183,17 @@ export function useWebSocket({ roomId, token, userId, onError }) {
   }, [connect])
 
   // ── public API ─────────────────────────────────────────────────────────────
-  const sendChat = useCallback(({ message, imageUrl }) => {
+  const sendChat = useCallback(({ message, imageUrl, videoUrl, replyToMessageId, replyTo }) => {
     safeSend({
       type: 'chat',
-      payload: { roomId, message: message || '', imageUrl: imageUrl || null },
+      payload: {
+        roomId,
+        message: message || '',
+        imageUrl: imageUrl || null,
+        videoUrl: videoUrl || null,
+        replyToMessageId: replyToMessageId || null,
+        replyToSnapshot: normalizeReplyTo(replyTo),
+      },
     })
   }, [roomId, safeSend])
 

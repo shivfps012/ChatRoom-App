@@ -7,27 +7,35 @@ interface MulterRequest extends Request {
   file?: Express.Multer.File
 }
 
-const router = Router()
+type MediaType = 'image' | 'video'
 
-// Use memory storage — buffer goes straight to Cloudinary
+const router = Router()
+const MAX_IMAGE_SIZE = 5 * 1024 * 1024
+const MAX_VIDEO_SIZE = 50 * 1024 * 1024
+
+function getMediaType(mimetype: string): MediaType | null {
+  if (mimetype.startsWith('image/')) return 'image'
+  if (mimetype.startsWith('video/')) return 'video'
+  return null
+}
+
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB max
+  limits: { fileSize: MAX_VIDEO_SIZE },
   fileFilter: (req: Request, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
-    if (!file.mimetype.startsWith('image/')) {
-      return cb(new Error('Only image files are allowed.'))
+    if (!getMediaType(file.mimetype)) {
+      return cb(new Error('Only image and video files are allowed.'))
     }
     cb(null, true)
   },
 })
 
-// Wrapper to handle multer errors
 const handleMulterError =
   (fn: any) => (req: Request, res: Response, next: NextFunction) => {
     fn(req, res, (err: any) => {
       if (err instanceof MulterError) {
         if (err.code === 'LIMIT_FILE_SIZE') {
-          return res.status(400).json({ message: 'File is too large. Max 5MB.' })
+          return res.status(400).json({ message: 'File is too large. Max video size is 50MB.' })
         }
         return res.status(400).json({ message: 'Upload error: ' + err.message })
       }
@@ -38,38 +46,68 @@ const handleMulterError =
     })
   }
 
-/**
- * POST /api/upload
- * Uploads image buffer to Cloudinary and returns the secure URL.
- */
 router.post(
   '/',
   protect,
-  handleMulterError(upload.single('image')),
+  handleMulterError(upload.single('media')),
   async (req: MulterRequest, res: Response) => {
     try {
+      console.log('📤 Upload request received', {
+        hasFile: !!req.file,
+        fileSize: req.file?.size,
+        fileMimetype: req.file?.mimetype,
+        userId: (req as any).userId,
+      })
+
       if (!req.file) {
-        res.status(400).json({ message: 'No image file provided.' })
+        console.warn('⚠️  No file provided')
+        res.status(400).json({ message: 'No media file provided.' })
         return
       }
 
-      // Upload buffer to Cloudinary using upload_stream
+      const mediaType = getMediaType(req.file.mimetype)
+      if (!mediaType) {
+        console.warn('⚠️  Unsupported media type:', req.file.mimetype)
+        res.status(400).json({ message: 'Unsupported media type.' })
+        return
+      }
+
+      if (mediaType === 'image' && req.file.size > MAX_IMAGE_SIZE) {
+        console.warn('⚠️  Image too large:', req.file.size)
+        res.status(400).json({ message: 'Image is too large. Max 5MB.' })
+        return
+      }
+
+      console.log('📤 Uploading to Cloudinary...')
       const url = await new Promise<string>((resolve, reject) => {
-        const stream = cloudinary.uploader.upload_stream(
-          { folder: 'chatroom', resource_type: 'auto' },
-          (error: any, result: any) => {
-            if (error) return reject(error)
-            resolve(result.secure_url)
+        const uploadOptions: any = {
+          folder: 'chatroom',
+          resource_type: 'auto',
+        }
+
+        // For videos, add specific timeout and queue settings
+        if (mediaType === 'video') {
+          uploadOptions.timeout = 60000
+          uploadOptions.eager = [{ format: 'mp4' }]
+        }
+
+        const stream = cloudinary.uploader.upload_stream(uploadOptions, (error: any, result: any) => {
+          if (error) {
+            console.error('❌ Cloudinary upload failed:', error)
+            return reject(error)
           }
-        )
+          console.log('✅ Cloudinary upload succeeded:', result.secure_url)
+          resolve(result.secure_url)
+        })
         stream.end(req.file!.buffer)
       })
 
-      res.status(200).json({ url })
+      console.log('✅ Sending response:', { url, mediaType })
+      res.status(200).json({ url, mediaType })
     } catch (err) {
       const error = err as Error
-      console.error('Upload error:', err)
-      res.status(500).json({ message: 'Image upload failed.', error: error.message })
+      console.error('❌ Upload error:', err)
+      res.status(500).json({ message: 'Media upload failed.', error: error.message })
     }
   }
 )
