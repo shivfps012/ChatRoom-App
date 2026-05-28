@@ -11,7 +11,7 @@ type MediaType = 'image' | 'video'
 
 const router = Router()
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024
-const MAX_VIDEO_SIZE = 50 * 1024 * 1024
+const MAX_VIDEO_SIZE = 100 * 1024 * 1024
 
 function getMediaType(mimetype: string): MediaType | null {
   if (mimetype.startsWith('image/')) return 'image'
@@ -35,7 +35,7 @@ const handleMulterError =
     fn(req, res, (err: any) => {
       if (err instanceof MulterError) {
         if (err.code === 'LIMIT_FILE_SIZE') {
-          return res.status(400).json({ message: 'File is too large. Max video size is 50MB.' })
+          return res.status(400).json({ message: 'File is too large. Max video size is 100MB.' })
         }
         return res.status(400).json({ message: 'Upload error: ' + err.message })
       }
