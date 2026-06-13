@@ -5,7 +5,7 @@ import { fileURLToPath } from 'url'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 // Load from server root (.env is in /server, not /server/dist/config)
-dotenv.config({ path: path.join(__dirname, '..', '.env') })
+dotenv.config()
 
 interface CloudinaryConfig {
   cloud_name?: string
@@ -18,8 +18,6 @@ const config: CloudinaryConfig = {
   api_key: process.env.CLOUDINARY_API_KEY,
   api_secret: process.env.CLOUDINARY_API_SECRET,
 }
-
-// Validate required Cloudinary env vars
 // Validate required Cloudinary env vars (warning only, not blocking)
 if (!config.cloud_name || !config.api_key || !config.api_secret) {
   console.warn(
