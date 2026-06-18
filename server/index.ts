@@ -21,6 +21,10 @@ import { closeRateLimitRedis } from './config/redisRateLimitStore.js'
 
 const app: Express = express()
 const server = http.createServer(app)
+const allowedOrigins = (process.env.CLIENT_URL || 'http://localhost:5173')
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean)
 
 // Trust proxy - important for rate limiting to work correctly
 app.set('trust proxy', 1)
@@ -28,7 +32,14 @@ app.set('trust proxy', 1)
 // ─── Middleware ────────────────────────────────────────────────────────────────
 app.use(
   cors({
-    origin: process.env.CLIENT_URL || 'http://localhost:5173',
+    origin: (origin, callback) => {
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true)
+        return
+      }
+
+      callback(new Error(`CORS blocked origin: ${origin}`))
+    },
     credentials: true,
   })
 )
